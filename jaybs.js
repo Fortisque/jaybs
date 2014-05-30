@@ -1,54 +1,51 @@
 Cards = new Meteor.Collection("cards");
 Players = new Meteor.Collection("players");
-Turn = new Meteor.Collection("turn");
+Singletons = new Meteor.Collection("singletons");
 
-var getCurrentTurn = function() {
-  var current_turn = Turn.findOne({curr: 'current_turn'});
-  if (current_turn == undefined) {
-    return undefined;
-  }
-  return current_turn.player_key;
+var PLAYED = -1;
+var SELECTED = -2;
+var GRAVEYARD = -3;
+
+var getCurrentPlayer = function() {
+  return Singletons.findOne({name: 'current_player'}).player_key;
 }
 
-var setCurrentTurn = function(number) {
-  var current_turn = Turn.findOne({curr: 'current_turn'});
+var setCurrentPlayer = function(number) {
+  var current_turn = Singletons.findOne({name: 'current_player'});
   if (current_turn == undefined) {
-    return Turn.insert({curr: 'current_turn', player_key: number});
+    return Singletons.insert({name: 'current_player', player_key: number});
   }
-  return Turn.update(current_turn._id, {$set: {player_key: number}});
+  return Singletons.update(current_turn._id, {$set: {player_key: number}});
 }
 
 var getLastCard = function() {
-  var last_card = Turn.findOne({curr: 'last_card'});
-  if (last_card == undefined) {
-    return undefined;
-  }
-  return last_card.sort_value;
+ return Singletons.findOne({name: 'last_card'}).sort_value;
 }
 
 var setLastCard = function(sort_value) {
-  var last_card = Turn.findOne({curr: 'last_card'});
+  var last_card = Singletons.findOne({name: 'last_card'});
   if (last_card == undefined) {
-    return Turn.insert({curr: 'last_card', sort_value: sort_value});
+    return Singletons.insert({name: 'last_card', sort_value: sort_value});
   }
-  return Turn.update(last_card._id, {$set: {sort_value: sort_value}});
+  return Singletons.update(last_card._id, {$set: {sort_value: sort_value}});
+}
+
+var getLastPlayer = function() {
+  return Singletons.findOne({name: 'last_player'}).player_key;
+}
+
+var setLastPlayer = function(player_key) {
+  var last_player = Singletons.findOne({name: 'last_player'});
+  if (last_player == undefined) {
+    return Singletons.insert({name: 'last_player', player_key: player_key});
+  }
+  return Singletons.update(last_player._id, {$set: {player_key: player_key}});
 }
 
 var shuffle = function() {
   var cardsArr = Cards.find().fetch();
   for (var i = 0; i < cardsArr.length; i++) {
     Cards.update(cardsArr[i]._id, {$set: {shuffle_key: Math.floor( Math.random() * 100000 )}});
-  }
-}
-
-var deleteAll = function() {
-  var cardsArr = Cards.find().fetch();
-  for (var i = 0; i < cardsArr.length; i++) {
-    Cards.remove(cardsArr[i]._id);
-  }
-  var cardsArr = Players.find().fetch();
-  for (var i = 0; i < cardsArr.length; i++) {
-    Players.remove(cardsArr[i]._id);
   }
 }
 
@@ -64,14 +61,24 @@ var distribute = function() {
     }
   }
 
-  setCurrentTurn(-1);
+  setLastCard(-1);
+  setCurrentPlayer(-1);
+  setLastPlayer(-1);
 }
 
 
 if (Meteor.isClient) {
 
   Template.table.playedCards = function () {
-    return Cards.find({player_key: -1}, {sort: {shuffle_key: 1}});
+    return Cards.find({player_key: PLAYED}, {sort: {shuffle_key: 1}});
+  };
+
+  Template.table.graveyardCards = function () {
+    return Cards.find({player_key: GRAVEYARD}, {sort: {shuffle_key: 1}});
+  };
+
+  Template.table.selectedCards = function () {
+    return Cards.find({player_key: SELECTED}, {sort: {shuffle_key: 1}});
   };
 
   Template.table.players = function () {
@@ -83,7 +90,15 @@ if (Meteor.isClient) {
   };
 
   Template.player.selected = function () {
-    return getCurrentTurn() === this._id ? 'selected' : '';
+    var key = Singletons.findOne({name: 'current_player'});
+    if(key == undefined) {
+      return ''
+    }
+    var player = Players.findOne(getCurrentPlayer());
+    if (player == undefined) {
+      return ''
+    }
+    return player._id === this._id ? 'selected' : '';
   };
 
   Template.table.events({
@@ -105,11 +120,11 @@ if (Meteor.isClient) {
     'click input.pass': function() {
       var player = Players.findOne({_id: this._id});
       var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-      if (Cards.findOne({sort_value: getLastCard()}).orig_player_key == nextPlayer._id) {
-        console.log("CLEAR");
+      if (getLastPlayer() == nextPlayer._id) {
+        console.log("CLEAR"); // need to do something
         setLastCard(-1); // can play anything on top of this.
       }
-      return setCurrentTurn(nextPlayer._id);
+      return setCurrentPlayer(nextPlayer._id);
     }
   });
 
@@ -120,16 +135,17 @@ if (Meteor.isClient) {
         Cards.update(obj._id, {$set: {player_key: -1}});
         var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
         setLastCard(obj.sort_value);
-        return setCurrentTurn(nextPlayer._id);
+        setLastPlayer(player._id);
+        return setCurrentPlayer(nextPlayer._id);
       };
 
-      if(getCurrentTurn() == -1) {
+      if(getCurrentPlayer() == -1) {
         if (this.sort_value != 0) {
           return console.log("oops not your turn!");
         }
         return setNextTurn(this);
       }
-      if(getCurrentTurn() != this.player_key) {
+      if(getCurrentPlayer() != this.player_key) {
         return console.log("oops not your turn!");
       }
 
@@ -160,7 +176,6 @@ if (Meteor.isServer) {
         }
       }
 
-      shuffle();
       distribute();
     }
   });
