@@ -59,7 +59,8 @@ var distribute = function() {
   var perPlayer = cardsArr.length/playerArr.length;
   for (var player = 0; player < playerArr.length; player++) {
     for (var i = player*perPlayer; i < (player+1)*perPlayer; i++) {
-      Cards.update(cardsArr[i]._id, {$set: {player_key: playerArr[player]._id}});
+      var key = playerArr[player]._id;
+      Cards.update(cardsArr[i]._id, {$set: {player_key: key, orig_player_key: key}});
     }
   }
 
@@ -104,6 +105,10 @@ if (Meteor.isClient) {
     'click input.pass': function() {
       var player = Players.findOne({_id: this._id});
       var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
+      if (Cards.findOne({sort_value: getLastCard()}).orig_player_key == nextPlayer._id) {
+        console.log("CLEAR");
+        setLastCard(-1); // can play anything on top of this.
+      }
       return setCurrentTurn(nextPlayer._id);
     }
   });
