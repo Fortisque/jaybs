@@ -1,0 +1,23 @@
+<head>
+  <title>JAYBS</title>
+</head>
+
+<body>
+  {{> table}}
+</body>
+
+<template name="table">
+  <input type="button" class="shuffle" value="Shuffle" />
+  <div class="table">
+    {{#each cards}}
+      {{> card}}
+    {{/each}}
+  </div>
+</template>
+
+<template name="card">
+  <div class="card">
+    <span class="rank">{{rank}}</span>
+    <span class="suit">{{suit}}</span>
+  </div>
+</template>
