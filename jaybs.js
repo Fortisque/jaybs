@@ -100,20 +100,29 @@ if (Meteor.isClient) {
       for (var i = 0; i < cardsArr.length; i++) {
         Cards.update(cardsArr[i]._id, {$set: {shuffle_key: cardsArr[i].sort_value}});
       }
+    },
+    'click input.pass': function() {
+      var player = Players.findOne({_id: this._id});
+      var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
+      return setCurrentTurn(nextPlayer._id);
     }
   });
 
   Template.card.events({
     'click input': function () {
+      var setNextTurn = function (obj) {
+        var player = Players.findOne({_id: obj.player_key});
+        Cards.update(obj._id, {$set: {player_key: -1}});
+        var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
+        setLastCard(obj.sort_value);
+        return setCurrentTurn(nextPlayer._id);
+      };
+
       if(getCurrentTurn() == -1) {
         if (this.sort_value != 0) {
           return console.log("oops not your turn!");
         }
-        var player = Players.findOne({_id: this.player_key});
-        Cards.update(this._id, {$set: {player_key: -1}});
-        var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-        setLastCard(this.sort_value);
-        return setCurrentTurn(nextPlayer._id);
+        return setNextTurn(this);
       }
       if(getCurrentTurn() != this.player_key) {
         return console.log("oops not your turn!");
@@ -123,13 +132,7 @@ if (Meteor.isClient) {
         return console.log("oops you must play a larger card");
       }
 
-      var player = Players.findOne({_id: this.player_key});
-      Cards.update(this._id, {$set: {player_key: -1}});
-      var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-      setLastCard(this.sort_value);
-      return setCurrentTurn(nextPlayer._id);
-
-      return console.log("oops something went wrong!");
+      return setNextTurn(this);
     }
   });
 }

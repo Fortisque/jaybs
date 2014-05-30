@@ -26,6 +26,9 @@
 <template name="player">
   <div class="player {{selected}}">
     <input type="button" class="sort" value="Sort my Cards" />
+    {{#if selected != ''}}
+      <input type="button" class="pass" value="Pass" />
+    {{/if}}
     <span class="name">{{name}}</span>
     {{#each cards}}
       {{> card}}
