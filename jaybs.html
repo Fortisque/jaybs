@@ -13,18 +13,24 @@
     {{#each players}}
       {{> player}}
     {{/each}}
+
+    <div class="player">
+      <span class="name">Played Cards</span>
+      {{#each playedCards}}
+        {{> card}}
+      {{/each}}
+    </div>
   </div>
 </template>
 
 <template name="player">
-  <div class="player">
+  <div class="player {{selected}}">
     <input type="button" class="sort" value="Sort my Cards" />
     <span class="name">{{name}}</span>
     {{#each cards}}
       {{> card}}
     {{/each}}
   </div>
-  <br><br>
 </template>
 
 <template name="card">

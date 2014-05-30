@@ -1,1 +1,7 @@
+.player {
+  padding: 20px;
+}
 
+.player.selected {
+    background-color: yellow;
+}
