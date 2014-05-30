@@ -8,16 +8,27 @@
 
 <template name="table">
   <input type="button" class="shuffle" value="Shuffle" />
+  <input type="button" class="distribute" value="Distribute Cards" />
   <div class="table">
-    {{#each cards}}
-      {{> card}}
+    {{#each players}}
+      {{> player}}
     {{/each}}
   </div>
 </template>
 
-<template name="card">
-  <div class="card">
-    <span class="rank">{{rank}}</span>
-    <span class="suit">{{suit}}</span>
+<template name="player">
+  <div class="player">
+    <input type="button" class="sort" value="Sort my Cards" />
+    <span class="name">{{name}}</span>
+    {{#each cards}}
+      {{> card}}
+    {{/each}}
   </div>
+  <br><br>
+</template>
+
+<template name="card">
+  <span class="card">
+    <input type="button" class="card" value="{{rank}}{{suit}}" />
+  </span>
 </template>
