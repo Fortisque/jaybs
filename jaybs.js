@@ -66,10 +66,10 @@ var distribute = function() {
   setLastPlayer(-1);
 }
 
-var setNextTurn = function (obj) {
-  var player = Players.findOne({_id: obj.player_key});
+var setNextTurn = function (card) {
+  var player = Players.findOne({_id: card.orig_player_key});
   var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-  setLastCard(obj.sort_value);
+  setLastCard(card.sort_value);
   setLastPlayer(player._id);
   return setCurrentPlayer(nextPlayer._id);
 };
@@ -134,6 +134,16 @@ if (Meteor.isClient) {
     },
     'click input.playSelectedCards': function() {
       //if !(myTurn(this._id))
+
+      var card = Cards.findOne({player_key: SELECTED});
+
+      if(getLastCard() > card.sort_value) {
+        return console.log("oops you must play a larger card");
+      }
+
+      Cards.update(card._id, {$set: {player_key: PLAYED}});
+
+      return setNextTurn(card);
     }
   });
 
@@ -152,23 +162,6 @@ if (Meteor.isClient) {
         setLastCard(-1); // can play anything on top of this.
       }
       return setCurrentPlayer(nextPlayer._id);
-    },
-    'click input.submit': function() {
-      if(getCurrentPlayer() == -1) {
-        if (this.sort_value != 0) {
-          return console.log("oops not your turn!");
-        }
-        return setNextTurn(this);
-      }
-      if(getCurrentPlayer() != this.player_key) {
-        return console.log("oops not your turn!");
-      }
-
-      if(getLastCard() > this.sort_value) {
-        return console.log("oops you must play a larger card");
-      }
-
-      return setNextTurn(this);
     }
   });
 
