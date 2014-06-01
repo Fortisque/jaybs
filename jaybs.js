@@ -66,6 +66,30 @@ var distribute = function() {
   setLastPlayer(-1);
 }
 
+var setNextTurn = function (obj) {
+  var player = Players.findOne({_id: obj.player_key});
+  var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
+  setLastCard(obj.sort_value);
+  setLastPlayer(player._id);
+  return setCurrentPlayer(nextPlayer._id);
+};
+
+var myTurn = function (player_key) {
+  if(getCurrentPlayer() == -1) {
+    var smallestCard = Cards.findOne({sort_value: 0});
+    if (smallestCard.orig_player_key != player_key) {
+      console.log("oops not your turn!");
+      return false;
+    }
+    return true;
+  }
+  if(getCurrentPlayer() != player_key) {
+    console.log("oops not your turn!");
+    return false;
+  }
+  return true;
+}
+
 
 if (Meteor.isClient) {
 
@@ -107,6 +131,9 @@ if (Meteor.isClient) {
     },
     'click input.distribute': function () {
       distribute();
+    },
+    'click input.playSelectedCards': function() {
+      //if !(myTurn(this._id))
     }
   });
 
@@ -125,20 +152,8 @@ if (Meteor.isClient) {
         setLastCard(-1); // can play anything on top of this.
       }
       return setCurrentPlayer(nextPlayer._id);
-    }
-  });
-
-  Template.card.events({
-    'click input': function () {
-      var setNextTurn = function (obj) {
-        var player = Players.findOne({_id: obj.player_key});
-        Cards.update(obj._id, {$set: {player_key: -1}});
-        var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-        setLastCard(obj.sort_value);
-        setLastPlayer(player._id);
-        return setCurrentPlayer(nextPlayer._id);
-      };
-
+    },
+    'click input.submit': function() {
       if(getCurrentPlayer() == -1) {
         if (this.sort_value != 0) {
           return console.log("oops not your turn!");
@@ -154,6 +169,21 @@ if (Meteor.isClient) {
       }
 
       return setNextTurn(this);
+    }
+  });
+
+
+  Template.card.events({
+    'click input': function () {
+      if(myTurn(this.orig_player_key)) {
+        Cards.update(this._id, {$set: {player_key: SELECTED}});
+      }
+    }
+  });
+
+  Template.selectedCard.events({
+    'click input': function () { // if selected its this players turn and can just return card.
+      Cards.update(this._id, {$set: {player_key: this.orig_player_key}});
     }
   });
 }
