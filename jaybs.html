@@ -23,8 +23,22 @@
     </div>
 
     <div class="player">
+      <span class="name">Last Played Cards</span>
+      {{#each lastPlayedCards}}
+        {{> card}}
+      {{/each}}
+    </div>
+
+    <div class="player">
       <span class="name">Played Cards</span>
       {{#each playedCards}}
+        {{> card}}
+      {{/each}}
+    </div>
+
+    <div class="player">
+      <span class="name">Discard Cards</span>
+      {{#each discardCards}}
         {{> card}}
       {{/each}}
     </div>
@@ -32,7 +46,7 @@
 </template>
 
 <template name="player">
-  <div class="player {{selected}}">
+  <div class="player {{selected}} {{lastPlayer}}">
     <input type="button" class="sort" value="Sort my Cards" />
     {{#if selected != ''}}
       <input type="button" class="pass" value="Pass" />
@@ -53,5 +67,11 @@
 <template name="card">
   <span class="card">
     <input type="button" class="card" value="{{rank}}{{suit}}" />
+  </span>
+</template>
+
+<template name="discardCard">
+  <span class="card">
+    {{rank}}{{suit}}}
   </span>
 </template>

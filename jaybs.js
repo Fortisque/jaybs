@@ -2,9 +2,10 @@ Cards = new Meteor.Collection("cards");
 Players = new Meteor.Collection("players");
 Singletons = new Meteor.Collection("singletons");
 
-var PLAYED = -1;
-var SELECTED = -2;
-var GRAVEYARD = -3;
+var SELECTED = -1;
+var LASTPLAYED = -2;
+var PLAYED = -3;
+var DISCARD = -4;
 
 var getCurrentPlayer = function() {
   return Singletons.findOne({name: 'current_player'}).player_key;
@@ -16,18 +17,6 @@ var setCurrentPlayer = function(number) {
     return Singletons.insert({name: 'current_player', player_key: number});
   }
   return Singletons.update(current_turn._id, {$set: {player_key: number}});
-}
-
-var getLastCard = function() {
- return Singletons.findOne({name: 'last_card'}).sort_value;
-}
-
-var setLastCard = function(sort_value) {
-  var last_card = Singletons.findOne({name: 'last_card'});
-  if (last_card == undefined) {
-    return Singletons.insert({name: 'last_card', sort_value: sort_value});
-  }
-  return Singletons.update(last_card._id, {$set: {sort_value: sort_value}});
 }
 
 var getLastPlayer = function() {
@@ -61,15 +50,13 @@ var distribute = function() {
     }
   }
 
-  setLastCard(-1);
   setCurrentPlayer(-1);
   setLastPlayer(-1);
 }
 
-var setNextTurn = function (card) {
-  var player = Players.findOne({_id: card.orig_player_key});
+var setNextTurn = function (cards) {
+  var player = Players.findOne({_id: cards[0].orig_player_key}); // one two three or 5 cards were played
   var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
-  setLastCard(card.sort_value);
   setLastPlayer(player._id);
   return setCurrentPlayer(nextPlayer._id);
 };
@@ -90,6 +77,47 @@ var myTurn = function (player_key) {
   return true;
 }
 
+var validPlay = function () {
+  var cardsTryingToPlay = Cards.find({player_key: SELECTED}).fetch();
+  // TODO
+  // make sure cardsTryingToPlay is a single, valid double, valid triple or valid poker hand.
+  var cardsToOverride = Cards.find({player_key:LASTPLAYED}).fetch();
+  if(cardsToOverride.length === 0) { // first to play this round
+    if(Cards.find({player_key:DISCARD}).fetch().length === 0) { // first play in game.
+      // must include the three of clubs (the smallest card)
+      var smallestCard = Cards.findOne({sort_value: 0});
+      for(var i = 0; i < cardsTryingToPlay.length; i++) {
+        if(smallestCard.sort_value == cardsTryingToPlay[i].sort_value) {
+          return true;
+        }
+      }
+      return false; // invalid play, must include 3 of clubs.
+    }
+
+    return true; // can play any valid hand over nothing.
+  }
+
+  if(cardsToOverride.length !== cardsTryingToPlay.length) {
+    return false;  // Once a round starts can only play same # cards.
+  }
+
+  if(cardsToOverride.length === 1 || cardsToOverride.length === 3) {
+    // For singles and triples only have to play higher. (Two players can't have same # triple b/c only 4 cards in a suit)
+    return cardsTryingToPlay[0].sort_value > cardsToOverride[0].sort_value;
+  }
+
+  if(cardsToOverride.length === 2) {
+    // Sometimes ties can occur.  This makes sure the top card is used as tiebreaker.
+    var bestTryingToPlay = max(cardsTryingToPlay[0].sort_value, cardsTryingToPlay[1].sort_value);
+    var bestTryingToOverride = max(cardsTryingToOverride[0].sort_value, cardsTryingToOverride[1].sort_value);
+    return bestTryingToPlay > bestTryingToOverride;
+  }
+
+  // TODO
+  // evaluate whether the 5 card poker hand is better or not!
+  return true;
+}
+
 
 if (Meteor.isClient) {
 
@@ -97,12 +125,16 @@ if (Meteor.isClient) {
     return Cards.find({player_key: PLAYED}, {sort: {shuffle_key: 1}});
   };
 
-  Template.table.graveyardCards = function () {
-    return Cards.find({player_key: GRAVEYARD}, {sort: {shuffle_key: 1}});
+  Template.table.discardCards = function () {
+    return Cards.find({player_key: DISCARD}, {sort: {shuffle_key: 1}});
   };
 
   Template.table.selectedCards = function () {
     return Cards.find({player_key: SELECTED}, {sort: {shuffle_key: 1}});
+  };
+
+  Template.table.lastPlayedCards = function () {
+    return Cards.find({player_key: LASTPLAYED}, {sort: {shuffle_key: 1}});
   };
 
   Template.table.players = function () {
@@ -125,6 +157,18 @@ if (Meteor.isClient) {
     return player._id === this._id ? 'selected' : '';
   };
 
+  Template.player.lastPlayer = function () {
+    var key = Singletons.findOne({name: 'last_player'});
+    if(key == undefined) {
+      return ''
+    }
+    var player = Players.findOne(getLastPlayer());
+    if (player == undefined) {
+      return ''
+    }
+    return player._id === this._id ? 'last_player' : '';
+  };
+
   Template.table.events({
     'click input.shuffle': function () {
       shuffle();
@@ -135,15 +179,25 @@ if (Meteor.isClient) {
     'click input.playSelectedCards': function() {
       //if !(myTurn(this._id))
 
-      var card = Cards.findOne({player_key: SELECTED});
+      var cards = Cards.find({player_key: SELECTED}).fetch();
 
-      if(getLastCard() > card.sort_value) {
-        return console.log("oops you must play a larger card");
+      if(!validPlay()) {
+        return console.log("oops your play was not valid");
       }
 
-      Cards.update(card._id, {$set: {player_key: PLAYED}});
+      // move last played to played
+      var lastPlayedCards = Cards.find({player_key: LASTPLAYED}).fetch();
+      for(var i = 0; i < lastPlayedCards.length; i++) {
+        Cards.update(lastPlayedCards[i]._id, {$set: {player_key: PLAYED}});
+      }
 
-      return setNextTurn(card);
+      // move selected to last played
+      for(var i = 0; i < cards.length; i++) {
+        Cards.update(cards[i]._id, {$set: {player_key: LASTPLAYED}});
+      }
+
+
+      return setNextTurn(cards);
     }
   });
 
@@ -158,8 +212,12 @@ if (Meteor.isClient) {
       var player = Players.findOne({_id: this._id});
       var nextPlayer = Players.findOne({turn_number: (player.turn_number + 1) % Players.find().count()});
       if (getLastPlayer() == nextPlayer._id) {
-        console.log("CLEAR"); // need to do something
-        setLastCard(-1); // can play anything on top of this.
+        var playedCards = Cards.find({player_key: PLAYED}).fetch(); // move all played to discard when round finshes.
+        var lastPlayedCards = Cards.find({player_key:LASTPLAYED}).fetch();
+        var cards = playedCards.concat(lastPlayedCards);
+        for(var i = 0; i < cards.length; i++) {
+          Cards.update(cards[i]._id, {$set: {player_key: DISCARD}});
+        }
       }
       return setCurrentPlayer(nextPlayer._id);
     }
