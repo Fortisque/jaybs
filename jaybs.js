@@ -7,6 +7,10 @@ var LASTPLAYED = -2;
 var PLAYED = -3;
 var DISCARD = -4;
 
+var max = function(x, y) {
+  return x > y ? x : y;
+}
+
 var getCurrentPlayer = function() {
   return Singletons.findOne({name: 'current_player'}).player_key;
 }
@@ -77,21 +81,154 @@ var myTurn = function (player_key) {
   return true;
 }
 
+var evaluatePokerHand = function (cards) {
+  // this is length 5.
+
+  var ranks = new Array("3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" ,"A", "2");
+  var myRanks = [ranks.indexOf(cards[0].rank), ranks.indexOf(cards[1].rank), ranks.indexOf(cards[2].rank), ranks.indexOf(cards[3].rank), ranks.indexOf(cards[4].rank)];
+  myRanks.sort();
+
+  var isFlush = function(cards) {
+    return cards[0].suit == cards[1].suit == cards[2].suit == cards[3].suit == cards[4].suit
+  }
+
+  var isStraight = function(cards) {
+    var start = myRanks[0];
+    for(var i = 1; i < cards.length; i++) {
+      start++;
+      if(ranks.indexOf(myRanks[i]) != start) {
+        return false;
+      }
+
+    }
+    return true;
+  }
+
+  var maxSortValue = -1;
+  for(var i = 0; i < cards.length; i++) {
+    maxSortValue = max(maxSortValue, cards.sort_value);
+  }
+  // maxSortValue serves as an tiebreaker.
+
+  if(isFlush(cards)) {
+    if(isStraight(cards)) {
+      return ['STRAIGHTFLUSH', maxSortValue]; // handles Royal and Straight Flush
+    }
+
+    return ['FLUSH', maxSortValue]; // handles Flush
+  }
+
+  if(isStraight(cards)) {
+    return ['STRAIGHT', maxSortValue]; // handles straight
+  }
+
+  var myRanksDict = {};
+  for(var i = 0; i < myRanks.length; i++) {
+    if(myRanksDict[myRanks[i]] == undefined) {
+      myRanksDict[myRanks[i]] = 0;
+    }
+    myRanksDict[myRanks[i]] += 1;
+  }
+
+  console.log(myRanksDict);
+
+  var maxOccuranceValue = -1;
+  var maxOccuranceKey = -1;
+  for (var key in myRanksDict) {
+    if(myRanksDict[key] > maxOccuranceValue) {
+      maxOccuranceValue = myRanksDict[key];
+      maxOccuranceKey = key;
+    }
+  };
+
+  if(maxOccuranceValue == 4) {
+    return ['FOUR', maxOccuranceKey]; // handles four of a kind
+  }
+
+  myRanksDict[maxOccuranceKey] = 0; // clobber the dictionary to find the 2nd max.
+  var nextOccuranceValue = -1;
+  var nextOccuranceKey = -1;
+  for (var key in myRanksDict) {
+    if(myRanksDict[key] > nextOccuranceValue) {
+      nextOccuranceValue = myRanksDict[key];
+      nextOccuranceKey = key;
+    }
+  };
+
+  if(maxOccuranceValue == 3) {
+    if(nextOccuranceValue == 2) {
+      return ['FULLHOUSE', maxOccuranceKey]; // handle full house
+    }
+  }
+
+  // Three of a kind, Two Pair, One Pair and High Cards are not valid in this game.
+  return false;
+
+
+}
+
+var validHand = function (cards) {
+  if(cards.length == 1) {
+    return true; // all singles are valid
+  }
+
+  if(cards.length == 2) {
+    return cards[0].rank == cards[1].rank; // valid pair
+  }
+
+  if(cards.length == 3) {
+    // valid triple
+    return cards[0].rank == cards[1].rank == cards[2].rank;
+  }
+
+  if(cards.length != 5) {
+    return false;
+  }
+
+  if(!evaluatePokerHand(cards)) { // wasn't a real poker hand
+    return false;
+  }
+
+  return true;
+}
+
+var evaluateHands = function (cardsTryingToPlay, cardsToOverride) {
+  // kinds of hands, lower is better
+  var handArray = ['STRAIGHTFLUSH', 'FOUR', 'FULLHOUSE', 'FLUSH', 'STRAIGHT'];
+
+  var tryingEval = evaluatePokerHand(cardsTryingToPlay);
+  var overrideEval = evaluatePokerHand(cardsToOverride);
+  var tryingRanked = handArray.indexOf(tryingEval[0]);
+  var overrideRanked = handArray.indexOf(overrideEval[0]);
+  if(tryingRanked < overrideRanked) {
+    return true;  // new hand was clearly better
+  }
+
+  if(overrideRanked != tryingRanked) {
+    return false; // old hand was clearly better
+  }
+  
+  return tryingEval[1] > overrideEval[1]; // Tied hands, use the tiebreaker
+}
+
 var validPlay = function () {
   var cardsTryingToPlay = Cards.find({player_key: SELECTED}).fetch();
-  // TODO
-  // make sure cardsTryingToPlay is a single, valid double, valid triple or valid poker hand.
+  if(!validHand(cardsTryingToPlay)) {
+    return false;
+  }
+
+  // this is a valid singe, double, triple or poker hand.
+
   var cardsToOverride = Cards.find({player_key:LASTPLAYED}).fetch();
   if(cardsToOverride.length === 0) { // first to play this round
     if(Cards.find({player_key:DISCARD}).fetch().length === 0) { // first play in game.
-      // must include the three of clubs (the smallest card)
       var smallestCard = Cards.findOne({sort_value: 0});
       for(var i = 0; i < cardsTryingToPlay.length; i++) {
         if(smallestCard.sort_value == cardsTryingToPlay[i].sort_value) {
           return true;
         }
       }
-      return false; // invalid play, must include 3 of clubs.
+      return false; // invalid play, must include 3 of clubs (smallest card)
     }
 
     return true; // can play any valid hand over nothing.
@@ -107,15 +244,17 @@ var validPlay = function () {
   }
 
   if(cardsToOverride.length === 2) {
-    // Sometimes ties can occur.  This makes sure the top card is used as tiebreaker.
+    // Sometimes ties (same rank pairs) can occur.  This makes sure the top card is used as tiebreaker.
     var bestTryingToPlay = max(cardsTryingToPlay[0].sort_value, cardsTryingToPlay[1].sort_value);
     var bestTryingToOverride = max(cardsTryingToOverride[0].sort_value, cardsTryingToOverride[1].sort_value);
     return bestTryingToPlay > bestTryingToOverride;
   }
 
-  // TODO
-  // evaluate whether the 5 card poker hand is better or not!
-  return true;
+  if(firstHandBetter(cardsTryingToPlay, cardsToOverride)) {
+
+  }
+
+  return evaluateHands(cardsTryingToPlay, cardsToOverride)
 }
 
 
