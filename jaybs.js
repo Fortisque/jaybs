@@ -1,6 +1,7 @@
 Cards = new Meteor.Collection("cards");
 Players = new Meteor.Collection("players");
 Singletons = new Meteor.Collection("singletons");
+Games = new Meteor.Collection("games");
 
 var SELECTED = -1;
 var LASTPLAYED = -2;
@@ -163,8 +164,6 @@ var evaluatePokerHand = function (cards) {
 
   // Three of a kind, Two Pair, One Pair and High Cards are not valid in this game.
   return false;
-
-
 }
 
 var validHand = function (cards) {
@@ -192,7 +191,7 @@ var validHand = function (cards) {
   return true;
 }
 
-var evaluateHands = function (cardsTryingToPlay, cardsToOverride) {
+var firstHandBetter = function (cardsTryingToPlay, cardsToOverride) {
   // kinds of hands, lower is better
   var handArray = ['STRAIGHTFLUSH', 'FOUR', 'FULLHOUSE', 'FLUSH', 'STRAIGHT'];
 
@@ -250,15 +249,74 @@ var validPlay = function () {
     return bestTryingToPlay > bestTryingToOverride;
   }
 
-  if(firstHandBetter(cardsTryingToPlay, cardsToOverride)) {
-
-  }
-
-  return evaluateHands(cardsTryingToPlay, cardsToOverride)
+  return firstHandBetter(cardsTryingToPlay, cardsToOverride)
 }
 
 
 if (Meteor.isClient) {
+
+  Meteor.startup(function () {
+    var player_id = Players.insert({name: ''});
+    Session.set('player_id', player_id);
+  });
+
+  var player = function () {
+    return Players.findOne(Session.get('player_id'));
+  };
+
+  var game = function () {
+    var me = player();
+    return me && me.game_id && Games.findOne(me.game_id);
+  };
+
+  Template.page.showLobby = function () {
+    // only show lobby if we're not in a game
+    return !game();
+  };
+
+  Template.lobby.waiting = function () {
+    var players = Players.find({_id: {$ne: Session.get('player_id')},
+                                name: {$ne: ''},
+                                game_id: {$exists: false}});
+
+    return players;
+  };
+
+  Template.lobby.count = function () {
+    var players = Players.find({_id: {$ne: Session.get('player_id')},
+                                name: {$ne: ''},
+                                game_id: {$exists: false}});
+
+    return players.count();
+  };
+
+  Template.lobby.disabled = function () {
+    var me = player();
+    if (me && me.name)
+      return '';
+    return 'disabled';
+  };
+
+  var trim = function (string) { return string.replace(/^\s+|\s+$/g, ''); };
+
+  Template.lobby.events({
+    'keyup input#myname': function (evt) {
+      var name = trim($('#lobby input#myname').val());
+      Players.update(Session.get('player_id'), {$set: {name: name}});
+    },
+    'click button.startgame': function () {
+      var game_id = Games.insert({});
+      var p = Players.find({game_id: null, name: {$ne: ''}}).fetch();
+      for(var i = 0; i < p.length; i++) {
+        Players.update(p[i]._id, {$set: {game_id: game_id}});
+      }
+      Games.update({_id: game_id}, {$set: {players: p}});
+    }
+  });
+
+  //////////////////
+  ///// TABLE //////
+  //////////////////
 
   Template.table.playedCards = function () {
     return Cards.find({player_key: PLAYED}, {sort: {shuffle_key: 1}});
@@ -318,11 +376,12 @@ if (Meteor.isClient) {
     'click input.playSelectedCards': function() {
       //if !(myTurn(this._id))
 
-      var cards = Cards.find({player_key: SELECTED}).fetch();
 
       if(!validPlay()) {
         return console.log("oops your play was not valid");
       }
+
+      var cards = Cards.find({player_key: SELECTED}).fetch();
 
       // move last played to played
       var lastPlayedCards = Cards.find({player_key: LASTPLAYED}).fetch();
@@ -342,10 +401,13 @@ if (Meteor.isClient) {
 
   Template.player.events({
     'click input.sort': function() {
-      var cardsArr = Cards.find({player_key: this._id}).fetch();
+      Cards.update({player_key: this._id},
+                   {$set: {shuffle_key: cardsArr[i].sort_value}},
+                   {multi: true});
+      /*var cardsArr = Cards.find({player_key: this._id}).fetch();
       for (var i = 0; i < cardsArr.length; i++) {
         Cards.update(cardsArr[i]._id, {$set: {shuffle_key: cardsArr[i].sort_value}});
-      }
+      }*/
     },
     'click input.pass': function() {
       var player = Players.findOne({_id: this._id});
@@ -380,12 +442,12 @@ if (Meteor.isClient) {
 
 if (Meteor.isServer) {
   Meteor.startup(function () {
-    if (Players.find().count() === 0) {
+    /*if (Players.find().count() === 0) {
       var names = ['Kevin', 'Alice', 'Ryan', 'Paul'];
       for (var i = 0; i < names.length; i++) {
         Players.insert({name: names[i], turn_number: i});
       }
-    };
+    };*/
 
     if (Cards.find().count() === 0) {
       var suits = new Array("C", "D", "H", "S");
@@ -396,7 +458,7 @@ if (Meteor.isServer) {
         }
       }
 
-      distribute();
+      //distribute();
     }
   });
 }

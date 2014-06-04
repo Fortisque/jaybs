@@ -3,8 +3,36 @@
 </head>
 
 <body>
-  {{> table}}
+  {{> page}}
 </body>
+
+<template name="page">
+  {{#if showLobby}}
+    {{> lobby}}
+  {{else}}
+    {{> table}}
+  {{/if}}
+</template>
+
+<template name="lobby">
+  <div>
+    <div id="lobby">
+      <h1>What's your name?</h1>
+      <input id="myname" type="text" />
+      {{#if count}}
+        <h1>{{count}} other players are in the lobby:</h1>
+        {{#each waiting }}
+          <div class="player">{{name}}</div>
+        {{/each}}
+      {{/if}}
+      <div>
+        <button id="startgame" class="startgame" {{disabled}}>
+          {{#if count}} It's on! {{else}} Play solo {{/if}}
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
 
 <template name="table">
   <input type="button" class="shuffle" value="Shuffle" />
