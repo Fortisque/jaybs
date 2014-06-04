@@ -7,6 +7,9 @@
 </body>
 
 <template name="page">
+  <h1>
+    {{playerName}}
+  </h1>
   {{#if showLobby}}
     {{> lobby}}
   {{else}}
@@ -60,14 +63,14 @@
     <div class="player">
       <span class="name">Played Cards</span>
       {{#each playedCards}}
-        {{> card}}
+        {{> discardCard}}
       {{/each}}
     </div>
 
     <div class="player">
       <span class="name">Discard Cards</span>
       {{#each discardCards}}
-        {{> card}}
+        {{> discardCard}}
       {{/each}}
     </div>
   </div>

@@ -8,10 +8,6 @@ var LASTPLAYED = -2;
 var PLAYED = -3;
 var DISCARD = -4;
 
-var max = function(x, y) {
-  return x > y ? x : y;
-}
-
 var getCurrentPlayer = function() {
   return Singletons.findOne({name: 'current_player'}).player_key;
 }
@@ -70,6 +66,7 @@ var myTurn = function (player_key) {
   if(getCurrentPlayer() == -1) {
     var smallestCard = Cards.findOne({sort_value: 0});
     if (smallestCard.orig_player_key != player_key) {
+      // smallest card not played, the player turn is the first.
       console.log("oops not your turn!");
       return false;
     }
@@ -107,7 +104,7 @@ var evaluatePokerHand = function (cards) {
 
   var maxSortValue = -1;
   for(var i = 0; i < cards.length; i++) {
-    maxSortValue = max(maxSortValue, cards.sort_value);
+    maxSortValue = Math.max(maxSortValue, cards.sort_value);
   }
   // maxSortValue serves as an tiebreaker.
 
@@ -244,8 +241,8 @@ var validPlay = function () {
 
   if(cardsToOverride.length === 2) {
     // Sometimes ties (same rank pairs) can occur.  This makes sure the top card is used as tiebreaker.
-    var bestTryingToPlay = max(cardsTryingToPlay[0].sort_value, cardsTryingToPlay[1].sort_value);
-    var bestTryingToOverride = max(cardsTryingToOverride[0].sort_value, cardsTryingToOverride[1].sort_value);
+    var bestTryingToPlay = Math.max(cardsTryingToPlay[0].sort_value, cardsTryingToPlay[1].sort_value);
+    var bestTryingToOverride = Math.max(cardsToOverride[0].sort_value, cardsToOverride[1].sort_value);
     return bestTryingToPlay > bestTryingToOverride;
   }
 
@@ -255,6 +252,7 @@ var validPlay = function () {
 
 if (Meteor.isClient) {
 
+
   Meteor.startup(function () {
     var player_id = Players.insert({name: ''});
     Session.set('player_id', player_id);
@@ -263,6 +261,13 @@ if (Meteor.isClient) {
   var player = function () {
     return Players.findOne(Session.get('player_id'));
   };
+
+  Template.page.playerName = function () {
+    var me = player();
+    if (me && me.name) {
+      return me.name;
+    }
+  }
 
   var game = function () {
     var me = player();
@@ -306,9 +311,11 @@ if (Meteor.isClient) {
     },
     'click button.startgame': function () {
       var game_id = Games.insert({});
+      // TODO
+      // enforce 4 players.
       var p = Players.find({game_id: null, name: {$ne: ''}}).fetch();
       for(var i = 0; i < p.length; i++) {
-        Players.update(p[i]._id, {$set: {game_id: game_id}});
+        Players.update(p[i]._id, {$set: {game_id: game_id, turn_number: i}});
       }
       Games.update({_id: game_id}, {$set: {players: p}});
     }
@@ -335,7 +342,7 @@ if (Meteor.isClient) {
   };
 
   Template.table.players = function () {
-    return Players.find({}, {sort: {number: 1}});
+    return Players.find({}, {sort: {turn_number: 1}});
   };
 
   Template.player.cards = function () {
@@ -374,14 +381,16 @@ if (Meteor.isClient) {
       distribute();
     },
     'click input.playSelectedCards': function() {
-      //if !(myTurn(this._id))
+      if (!myTurn(player()._id)) {
+        console.log("not your turn!");
+        return;
+      }
 
 
       if(!validPlay()) {
         return console.log("oops your play was not valid");
       }
 
-      var cards = Cards.find({player_key: SELECTED}).fetch();
 
       // move last played to played
       var lastPlayedCards = Cards.find({player_key: LASTPLAYED}).fetch();
@@ -389,6 +398,7 @@ if (Meteor.isClient) {
         Cards.update(lastPlayedCards[i]._id, {$set: {player_key: PLAYED}});
       }
 
+      var cards = Cards.find({player_key: SELECTED}).fetch();
       // move selected to last played
       for(var i = 0; i < cards.length; i++) {
         Cards.update(cards[i]._id, {$set: {player_key: LASTPLAYED}});
@@ -401,13 +411,13 @@ if (Meteor.isClient) {
 
   Template.player.events({
     'click input.sort': function() {
-      Cards.update({player_key: this._id},
+      /*Cards.update({player_key: this._id},
                    {$set: {shuffle_key: cardsArr[i].sort_value}},
-                   {multi: true});
-      /*var cardsArr = Cards.find({player_key: this._id}).fetch();
+                   {multi: true});*/
+      var cardsArr = Cards.find({player_key: this._id}).fetch();
       for (var i = 0; i < cardsArr.length; i++) {
         Cards.update(cardsArr[i]._id, {$set: {shuffle_key: cardsArr[i].sort_value}});
-      }*/
+      }
     },
     'click input.pass': function() {
       var player = Players.findOne({_id: this._id});
@@ -420,7 +430,8 @@ if (Meteor.isClient) {
           Cards.update(cards[i]._id, {$set: {player_key: DISCARD}});
         }
       }
-      return setCurrentPlayer(nextPlayer._id);
+       setCurrentPlayer(nextPlayer._id);
+      return;
     }
   });
 
@@ -442,12 +453,6 @@ if (Meteor.isClient) {
 
 if (Meteor.isServer) {
   Meteor.startup(function () {
-    /*if (Players.find().count() === 0) {
-      var names = ['Kevin', 'Alice', 'Ryan', 'Paul'];
-      for (var i = 0; i < names.length; i++) {
-        Players.insert({name: names[i], turn_number: i});
-      }
-    };*/
 
     if (Cards.find().count() === 0) {
       var suits = new Array("C", "D", "H", "S");
@@ -457,8 +462,6 @@ if (Meteor.isServer) {
           Cards.insert({suit: suits[i], rank: ranks[j], sort_value: i + j*suits.length});
         }
       }
-
-      //distribute();
     }
   });
 }
