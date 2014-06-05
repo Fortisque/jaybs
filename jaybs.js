@@ -254,7 +254,16 @@ if (Meteor.isClient) {
 
  
   Meteor.startup(function () {
+  });
+
+  Meteor.subscribe('default_db_data', function(){
+     //Set the reactive session as true to indicate that the data have been loaded
     var name = window.prompt("Enter your name", "");
+    if(!name) {
+      var player_id = Players.insert({name: ''});
+      Session.set('player_id', player_id);
+      return;
+    }
     var me = Players.findOne({name: name});
     if(me) {
       Session.set('player_id', me._id);
@@ -470,5 +479,9 @@ if (Meteor.isServer) {
         }
       }
     }
+
+    Meteor.publish('default_db_data', function(){
+        return Players.find({});
+    });
   });
 }
