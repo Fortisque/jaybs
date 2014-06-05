@@ -252,10 +252,17 @@ var validPlay = function () {
 
 if (Meteor.isClient) {
 
-
+ 
   Meteor.startup(function () {
-    var player_id = Players.insert({name: ''});
-    Session.set('player_id', player_id);
+    var name = window.prompt("Enter your name", "");
+    var me = Players.findOne({name: name});
+    if(me) {
+      Session.set('player_id', me._id);
+    } else {
+      var player_id = Players.insert({name: name});
+      Session.set('player_id', player_id);
+    }
+    $('#lobby input#myname').val(name)
   });
 
   var player = function () {
