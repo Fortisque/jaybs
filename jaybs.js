@@ -84,7 +84,7 @@ var evaluatePokerHand = function (cards) {
 
   var ranks = new Array("3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" ,"A", "2");
   var myRanks = [ranks.indexOf(cards[0].rank), ranks.indexOf(cards[1].rank), ranks.indexOf(cards[2].rank), ranks.indexOf(cards[3].rank), ranks.indexOf(cards[4].rank)];
-  myRanks.sort();
+  myRanks.sort(function(a, b){return a-b}); // ascending numerical sort
 
   var isFlush = function(cards) {
     return cards[0].suit == cards[1].suit == cards[2].suit == cards[3].suit == cards[4].suit
@@ -93,8 +93,8 @@ var evaluatePokerHand = function (cards) {
   var isStraight = function(cards) {
     var start = myRanks[0];
     for(var i = 1; i < cards.length; i++) {
-      start++;
-      if(ranks.indexOf(myRanks[i]) != start) {
+      if(myRanks[i] != start + i) {
+        console.log(myRanks);
         return false;
       }
 
@@ -104,7 +104,7 @@ var evaluatePokerHand = function (cards) {
 
   var maxSortValue = -1;
   for(var i = 0; i < cards.length; i++) {
-    maxSortValue = Math.max(maxSortValue, cards.sort_value);
+    maxSortValue = Math.max(maxSortValue, cards[i].sort_value);
   }
   // maxSortValue serves as an tiebreaker.
 
@@ -127,8 +127,6 @@ var evaluatePokerHand = function (cards) {
     }
     myRanksDict[myRanks[i]] += 1;
   }
-
-  console.log(myRanksDict);
 
   var maxOccuranceValue = -1;
   var maxOccuranceKey = -1;
@@ -194,6 +192,8 @@ var firstHandBetter = function (cardsTryingToPlay, cardsToOverride) {
 
   var tryingEval = evaluatePokerHand(cardsTryingToPlay);
   var overrideEval = evaluatePokerHand(cardsToOverride);
+  console.log(tryingEval);
+  console.log(overrideEval);
   var tryingRanked = handArray.indexOf(tryingEval[0]);
   var overrideRanked = handArray.indexOf(overrideEval[0]);
   if(tryingRanked < overrideRanked) {
@@ -318,6 +318,7 @@ if (Meteor.isClient) {
         Players.update(p[i]._id, {$set: {game_id: game_id, turn_number: i}});
       }
       Games.update({_id: game_id}, {$set: {players: p}});
+      distribute();
     }
   });
 
@@ -411,9 +412,6 @@ if (Meteor.isClient) {
 
   Template.player.events({
     'click input.sort': function() {
-      /*Cards.update({player_key: this._id},
-                   {$set: {shuffle_key: cardsArr[i].sort_value}},
-                   {multi: true});*/
       var cardsArr = Cards.find({player_key: this._id}).fetch();
       for (var i = 0; i < cardsArr.length; i++) {
         Cards.update(cardsArr[i]._id, {$set: {shuffle_key: cardsArr[i].sort_value}});
@@ -438,7 +436,7 @@ if (Meteor.isClient) {
 
   Template.card.events({
     'click input': function () {
-      if(myTurn(this.orig_player_key)) {
+      if(this.orig_player_key == player()._id && myTurn(this.orig_player_key)) {
         Cards.update(this._id, {$set: {player_key: SELECTED}});
       }
     }
@@ -446,7 +444,9 @@ if (Meteor.isClient) {
 
   Template.selectedCard.events({
     'click input': function () { // if selected its this players turn and can just return card.
-      Cards.update(this._id, {$set: {player_key: this.orig_player_key}});
+      if(myTurn(this.orig_player_key)) {
+        Cards.update(this._id, {$set: {player_key: this.orig_player_key}});
+      }
     }
   });
 }
